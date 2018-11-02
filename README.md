@@ -1,4 +1,6 @@
-Moodle Destroyer Tools - v1.0.0
+Hostile fork of Moodle Destroyer Tools - v1.0.0
+
+soon to be v2
 
 Notable changes since 0.3.1:
 
