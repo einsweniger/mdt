@@ -1,7 +1,7 @@
 from .editorfield import EditorField
 from .filearea import FileArea
 from .file import File
-from moodle.models import MoodlePlugin
+from moodle.responses import MoodlePlugin
 from typing import Iterable
 
 

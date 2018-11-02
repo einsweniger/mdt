@@ -1,4 +1,4 @@
-from moodle.models import MoodleGrade
+from moodle.responses import MoodleGrade
 from datetime import datetime
 
 class Grade(MoodleGrade):

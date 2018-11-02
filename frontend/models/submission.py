@@ -3,7 +3,7 @@ from abc import abstractmethod, abstractproperty, ABC
 from .file import File
 from .plugin import Plugin
 from .grade import Grade
-from moodle.models import MoodleSubmission
+from moodle.responses import MoodleSubmission
 from util.werkzeug import cached_property
 from typing import Dict, Tuple, Iterable, List
 

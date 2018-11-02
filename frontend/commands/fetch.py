@@ -1,3 +1,5 @@
+from frontend import MoodleFrontend
+from persistence.config import get_global_config
 from . import pm, Argument
 
 @pm.command(
@@ -8,8 +10,8 @@ from . import pm, Argument
     Argument('-u', '--users', help='sync users', action='store_true', default=False),
     Argument('-f', '--files', help='sync file metadata', action='store_true', default=False)
 )
-def sync(assignments=False, submissions=False, grades=False, users=False, files=False):
-    frontend = MoodleFrontend()
+def fetch(assignments=False, submissions=False, grades=False, users=False, files=False):
+    frontend = MoodleFrontend(config=get_global_config())
 
     sync_all = True
     if users or submissions or assignments or grades or files:

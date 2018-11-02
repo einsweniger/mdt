@@ -15,11 +15,11 @@ def auth(url=None, ask=False, user_name=None, service='moodle_mobile_app', cfg: 
     """
     Retreives a Web Service Token for the given user and host and saves it to the global config.
 
+    :param cfg: a GlobalConfig to modify
     :param url: the moodle host
     :param ask: set this to true, to get asked for input of known values anyway.
-    :param username: the login for which you'd like to retrieve a token for.
+    :param user_name: the login for which you'd like to retrieve a token for.
     :param service: the configured Web Service, you'd like the token for.
-    :param local: write auth info to local file
     :return: nothing.
     """
 
@@ -42,8 +42,9 @@ def auth(url=None, ask=False, user_name=None, service='moodle_mobile_app', cfg: 
 
     session = MoodleSession(moodle_url=url)
 
-    cfg.config.token = session.get_token(user_name, password, service)
-    session.token = cfg.config.token
+    response = session.get_token(user_name, password, service)
+    print(response)
+    session.token = cfg.config.token = response.token
     del password
 
     # Writing values here once, to allow MoodleFrontend to read from it.

@@ -3,7 +3,7 @@ from abc import ABC
 from .file import File
 from .submission import TeamSubmission, SingleSubmission, SubmissionBase
 from .grade import Grade
-from moodle.models import MoodleAssignment
+from moodle.responses import MoodleAssignment
 from datetime import datetime
 from typing import Dict, Iterable
 
@@ -17,7 +17,7 @@ class AssignmentBase(MoodleAssignment, ABC):
 
     @property
     def due_date(self) -> datetime:
-        return datetime.fromtimestamp(super().due_date)
+        return datetime.fromtimestamp(super().duedate)
 
     @property
     def submissions(self) -> Dict[int, SubmissionBase]:
@@ -60,7 +60,7 @@ class AssignmentBase(MoodleAssignment, ABC):
             self._submissions = {}
             return
         for submission in data:
-            if self.is_team_submission:
+            if self.teamsubmission:
                 sub = TeamSubmission(submission, assignment=self)
             else:
                 sub = SingleSubmission(submission, assignment=self)
@@ -96,12 +96,12 @@ class Assignment(AssignmentBase):
         line_format = '{{"name": "{}", "id": {:d}, "grade": {:3.1f}, "feedback":"" }}'
         content = []
 
-        if self.is_team_submission:
+        if self.teamsubmission:
             for s_id, s in self.submissions.items():
-                if s.group_id not in self.course.groups:
+                if s.groupid not in self.course.groups:
                     # FIXME: invalid grouping
                     continue
-                group = self.course.groups[s.group_id]
+                group = self.course.groups[s.groupid]
                 grade = 0.0
                 if s.grade is not None:
                     grade = s.grade.value or 0.0
@@ -110,7 +110,7 @@ class Assignment(AssignmentBase):
                 content.append(line)
         else:
             for s_id, s in self.submissions.items():
-                user = self.course.users[s.user_id]
+                user = self.course.users[s.userid]
                 grade = 0.0
                 if s.grade is not None:
                     grade = s.grade.value or 0.0
@@ -169,7 +169,7 @@ class Assignment(AssignmentBase):
         for s in self.valid_submissions:
             tmp = ''
             if s.has_editor_field_content and s.editor_field_content.strip() != '':
-                if self.is_team_submission:
+                if self.teamsubmission:
                     group = self.course.groups[s.group_id]
                     member_names = [user.name for user in group.members]
                     tmp += seperator_team.format(group.name, ', '.join(member_names))

@@ -1,5 +1,5 @@
 from .file import File
-from moodle.models import MoodleFileArea
+from moodle.responses import MoodleFileArea
 from typing import Iterable
 
 class FileArea(MoodleFileArea):

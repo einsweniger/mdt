@@ -1,7 +1,9 @@
 import argparse
+from abc import ABC,abstractmethod
 
 
-class ArgparseArgument:
+class ArgparseArgument(ABC):
+    @abstractmethod
     def add_to_parser(self, parser):
         raise NotImplementedError
 
@@ -28,7 +30,6 @@ class ArgumentGroup(ArgparseArgument):
 
 
 class ParserManager:
-    # TODO: rework ParserManager to scan submodules for commands, move to commands module.
     def __init__(self, name, help_text):
         self.name = name
         self.help = help_text
@@ -47,5 +48,6 @@ class ParserManager:
             for arg in arguments:
                 arg.add_to_parser(sub)
             sub.set_defaults(func=decorated_fn)
+            return decorated_fn
 
         return register_function

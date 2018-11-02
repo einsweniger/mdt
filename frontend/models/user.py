@@ -1,6 +1,6 @@
 from typing import Dict, List
 
-from moodle.models import MoodleUser, MoodleGroup
+from moodle.responses import MoodleUser, MoodleGroup
 
 
 class Group(MoodleGroup):

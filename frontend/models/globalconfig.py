@@ -1,4 +1,4 @@
-from moodle.models import JsonDictWrapper
+from moodle.responses import JsonDictWrapper
 
 
 class GlobalConfig(JsonDictWrapper):

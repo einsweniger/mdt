@@ -3,23 +3,25 @@
 # multithreading https://docs.python.org/3/tutorial/stdlib2.html#multi-threading
 # also: multiprocessing http://python-3-patterns-idioms-test.readthedocs.io/en/latest/CoroutinesAndConcurrency.html
 # unittests https://docs.python.org/3/library/unittest.html
-import argparse
-import getpass
-import json
 import logging
-import shutil
 
-from frontend import MoodleFrontend
-from frontend.models import Course, Assignment
-from moodle.fieldnames import JsonFieldNames as Jn, text_format
-from persistence.worktree import WorkTree
-from util import interaction
 from frontend.cmdparser import ParserManager, Argument, ArgumentGroup
 
 log = logging.getLogger('wstools')
 pm = ParserManager('wstools', 'internal sub command help')
 
 from .auth import auth
+from .config import config
+from .dump import dump
+from .enrol import enrol
+from .fetch import fetch
+# from .grade import grade
+from .init import init
+# from .pull import pull
+# from .status import status
+# from .submit import submit
+# from .upload import upload
+from .clone import clone
 
 
 def make_config_parser():

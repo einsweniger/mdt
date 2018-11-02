@@ -1,4 +1,4 @@
-from moodle.models import MoodleEditorField
+from moodle.responses import MoodleEditorField
 
 
 class EditorField(MoodleEditorField):

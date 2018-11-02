@@ -1,4 +1,4 @@
-from moodle.models import MoodleCourse
+from moodle.responses import MoodleCourse
 from .assignment import Assignment
 from .user import User, Group
 
@@ -14,7 +14,7 @@ class Course(MoodleCourse):
 
     @property
     def name(self) -> str:
-        return self.full_name
+        return self.fullname
 
     @property
     def users(self) -> Dict[int, User]:
@@ -55,10 +55,10 @@ class Course(MoodleCourse):
             group.members.append(user)
 
     def __str__(self):
-        return f'{self.full_name[0:39]:40} id:{self.id:5d} short: {self.short_name}'
+        return f'{self.fullname[0:39]:40} id:{self.id:5d} short: {self.shortname}'
 
     def __repr__(self):
-        return repr((self.full_name, self.id, self.short_name))
+        return repr((self.fullname, self.id, self.shortname))
 
     def print_status(self):
         print(self)

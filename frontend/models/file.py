@@ -1,4 +1,4 @@
-from moodle.models import MoodleSubmissionFile
+from moodle.responses import MoodleSubmissionFile
 from moodle.parsers import file_meta_dict_from_url
 
 

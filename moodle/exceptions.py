@@ -1,4 +1,4 @@
-from abc import abstractproperty
+from abc import abstractmethod
 
 
 class _ExceptionRegistry(type):
@@ -17,7 +17,9 @@ class _ExceptionRegistry(type):
 
 
 class MoodleException(Exception, metaclass=_ExceptionRegistry):
-    @abstractproperty
+
+    @property
+    @abstractmethod
     def code(self):
         pass
 

@@ -14,11 +14,18 @@ import logging
 
 log = logging.getLogger('moodle.communication')
 
+from dataclasses import dataclass
+
+@dataclass
+class TokenResponse:
+    token: str
+    privatetoken: str
+
 
 class MoodleSessionCore(requests.Session):
     ws_path = '/webservice/rest/server.php'
 
-    def __init__(self, moodle_url, token=None, rest_format='json'):
+    def __init__(self, moodle_url, token=None):
         super().__init__()
         self.token = token
 
@@ -26,12 +33,11 @@ class MoodleSessionCore(requests.Session):
             moodle_url = 'https://' + moodle_url[4:]
         if not moodle_url.startswith('https://'):
             moodle_url = 'https://' + moodle_url
-        self.rest_format = rest_format
         self.url = moodle_url
 
     def post_web_service(self, ws_function, args=None):
         needed_args = {
-            Jn.moodle_ws_rest_format: self.rest_format,
+            Jn.moodle_ws_rest_format: 'json',
             Jn.ws_token: self.token,
             Jn.ws_function: ws_function
         }
@@ -41,10 +47,6 @@ class MoodleSessionCore(requests.Session):
             args.update(needed_args)
 
         response = self.post(self.url + self.ws_path, args)
-
-        if 'json' != self.rest_format:
-            return response.text
-
         try:
             payload = json.loads(strip_mlang(response.text))
             if isinstance(payload, dict) and 'exception' in payload:
@@ -79,17 +81,18 @@ class MoodleSessionCore(requests.Session):
 
         try:
             payload = response.json()
-        except json.JSONDecodeError:
-            log.error(f'Moodle returned unexpected values, expected valid json:\n {response.text}')
-            raise SystemExit(1)
-
+            print(payload)
+        except json.JSONDecodeError as e:
+            log.error(f'Moodle returned unexpected values, expected valid json:\n {e.__dict__}')
+            payload = {}
         try:
-            return payload[Jn.token]
-        except KeyError:
+            return TokenResponse(**payload)
+        except TypeError as e:
             if payload.get('errorcode', None) == 'invalidlogin':
                 log.warning(f'wrong authentication information?\n {str(payload)}')
             else:
-                log.error(f'Something went wrong:\n {str(payload)}')
+                log.error(f'Something went wrong:\n {str(payload)} \n {e}')
+            raise
 
     def upload_files(self, fd_list, file_path='/', file_area='draft', item_id=0):
         endpoint = '/webservice/upload.php'
@@ -106,17 +109,14 @@ class MoodleSessionCore(requests.Session):
 
         data = {
             Jn.file_path: file_path,
-            Jn.file_area: file_area,
+            # Jn.file_area: file_area,  # deprecated in 3.1
             Jn.item_id: item_id,
             Jn.token: self.token
         }
 
         response = self.post(self.url + endpoint, data, files=upload_info)
-        if 'json' != self.rest_format:
-            return response.text
-
         try:
-            payload = json.loads(response.text)
+            payload = response.json()
             if isinstance(payload, dict) and 'exception' in payload:
                 raise MoodleException.generate_exception(**payload)
             return payload

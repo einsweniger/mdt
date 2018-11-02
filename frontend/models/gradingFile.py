@@ -1,4 +1,4 @@
-from moodle.models import JsonDictWrapper, JsonListWrapper
+from moodle.responses import JsonDictWrapper, JsonListWrapper
 from typing import Iterable
 
 

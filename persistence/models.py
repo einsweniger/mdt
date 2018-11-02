@@ -4,8 +4,9 @@ import os
 from pathlib import Path
 from collections import Mapping
 from abc import abstractmethod
+from dataclasses import asdict
 
-import moodle.models as models
+import moodle.responses as models
 # TODO, mebbe add locks for async usage.
 
 
@@ -29,11 +30,8 @@ class CachedMapping(Mapping):
         try:
             return self._cache[key]
         except KeyError:
-            pass
-
-        # try reading from resource.
-        self._cache[key] = self._read_data(key)
-        return self._cache[key]
+            self._cache[key] = self._read_data(key)
+            return self._cache[key]
 
     @abstractmethod
     def _read_data(self, key):
@@ -144,23 +142,25 @@ class AssignmentFolder(JsonDataFolder):
     def folder_name(self):
         return 'assignments'
 
-    def update(self, json_data):
-        response = models.CourseAssignmentResponse(json_data)
+    def update(self, response: models.mod_assign_get_assignments):
+        #response = models.mod_assign_get_assignments(**json_data)
         result = dict.fromkeys(['new', 'updated', 'unchanged'], 0)
         for course in response.courses:
             for assignment in course.assignments:
-                key = assignment.id
-                value = assignment
                 try:
-                    local_data = models.MoodleAssignment(self[key])
-                    if local_data.time_modified < assignment.time_modified:
-                        self._setitem(assignment.id, assignment.raw)
+                    local_data = models.MoodleAssignment(**self[assignment.id])
+                    if local_data.timemodified < assignment.timemodified:
+                        self._setitem(assignment.id, asdict(assignment))
                         result['updated'] += 1
                     else:
                         result['unchanged'] += 1
                 except KeyError:
-                    self._setitem(assignment.id, assignment.raw)
+                    self._setitem(assignment.id, asdict(assignment))
                     result['new'] += 1
+                except TypeError:
+                    self._setitem(assignment.id, asdict(assignment))
+                    result['new'] += 1
+
         return result
 
 
@@ -176,19 +176,19 @@ class SubmissionFolder(JsonMetaDataFolder):
         local_submissions = {sub.id: sub for sub in local_list}
         for submission in submissions:
             local_submissions[submission.id] = submission
-        raw = [sub.raw for sub in local_submissions.values()]
+        raw = [asdict(sub) for sub in local_submissions.values()]
         self._setitem(assignment_id, raw)
 
     def update(self, json_data, time_of_sync):
         result = dict.fromkeys(['new', 'updated', 'unchanged'], 0)
-        response = models.AssignmentSubmissionResponse(json_data)
+        response = models.mod_assign_get_submissions(**json_data)
         for assignment in response.assignments:
-            if assignment.id in self and len(assignment.submissions) > 0:
-                self._update_submissions(assignment.id, assignment.submissions)
+            if assignment.assignmentid in self and len(assignment.submissions) > 0:
+                self._update_submissions(assignment.assignmentid, assignment.submissions)
                 result['updated'] += 1
             elif len(assignment.submissions) > 0:
                 result['new'] += 1
-                self._setitem(assignment.id, assignment.submissions.raw)
+                self._setitem(assignment.assignmentid, asdict(assignment.submissions))
             else:
                 result['unchanged'] += 1
         self.last_sync = time_of_sync

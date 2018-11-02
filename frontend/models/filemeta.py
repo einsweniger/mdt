@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from moodle.models import MoodleFileMeta
+from moodle.responses import MoodleFileMeta
 
 
 class FileMeta(MoodleFileMeta):

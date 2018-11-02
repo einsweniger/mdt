@@ -3,35 +3,36 @@ import json
 from datetime import datetime
 import math
 
-import moodle.models as models
-from frontend.models import Submission, GradingFile, Assignment, Course
+import moodle.responses as models
+from frontend.models import GradingFile, Assignment, Course, TeamSubmission
 from moodle.exceptions import AccessDenied, InvalidResponse
+from persistence.config import GlobalConfig
 from persistence.worktree import WorkTree
 from util import interaction
-
+from typing import List
 MAX_WORKERS = 10
 
 
 class MoodleFrontend:
-    def __init__(self, worktree=None):
+    def __init__(self, worktree=None, config: GlobalConfig=None):
         # todo, read course from worktree config.
         from moodle.communication import MoodleSession
-        self.worktree = worktree or WorkTree()
-        self.config = WorkTree.get_global_config_values()
+        self.wt = worktree or WorkTree()
+        self.config = config.config
         self.session = MoodleSession(moodle_url=self.config.url, token=self.config.token)
 
     @property
     def course_ids(self):
-        return self.worktree.courses.keys()
+        return self.wt.meta.courses.keys()
 
     @property
     def assignment_ids(self):
-        return self.worktree.assignments.keys()
+        return self.wt.meta.assignments.keys()
 
     def sync_assignments(self):
         response = self.session.mod_assign_get_assignments(self.course_ids)
-        wrapped = models.CourseAssignmentResponse(response)
-        result = self.worktree.assignments.update(wrapped.raw)
+        wrapped = models.mod_assign_get_assignments(**response)
+        result = self.wt.meta.assignments.update(wrapped)
         output = ['{}: {:d}'.format(k, v) for k, v in result.items()]
         return output
 
@@ -54,34 +55,34 @@ class MoodleFrontend:
                 message = f'Moodle encountered an error: msg:{e.message} \n debug:{e.debug_message}\n'
                 output += message
 
-        self.worktree.users = users
+        self.wt.meta.write_user_data(users)
 
         return output
 
     def sync_submissions(self):
         now = math.floor(datetime.now().timestamp())
         response = self.session.mod_assign_get_submissions(self.assignment_ids,
-                                                           since=self.worktree.submissions.last_sync)
-        result = self.worktree.submissions.update(response, now)
+                                                           since=self.wt.meta.submissions.last_sync)
+        result = self.wt.meta.submissions.update(response, now)
         output = ['{}: {:d}'.format(k, v) for k, v in result.items()]
         return output
 
     def sync_grades(self):
         now = math.floor(datetime.now().timestamp())
-        response = self.session.mod_assign_get_grades(self.assignment_ids, since=self.worktree.grades.last_sync)
-        result = self.worktree.grades.update(response, now)
+        response = self.session.mod_assign_get_grades(self.assignment_ids, since=self.wt.meta.grades.last_sync)
+        result = self.wt.meta.grades.update(response, now)
         output = ['{}: {:d}'.format(k, v) for k, v in result.items()]
         return output
 
     def get_course_list(self):
-        wrapped = models.CourseListResponse(self.session.core_enrol_get_users_courses(self.config.user_id))
-        return wrapped
+        data = self.session.core_enrol_get_users_courses(self.config.user_id)
+        return models.core_enrol_get_users_courses(data)
 
     def sync_file_meta_data(self):
         files = []
-        for as_id, submissions in self.worktree.submissions.items():
+        for as_id, submissions in self.wt.meta.submissions.items():
             for submission in submissions:
-                files += Submission(submission).files
+                files += TeamSubmission(submission).files
             with cf.ThreadPoolExecutor(max_workers=MAX_WORKERS) as tpe:
                 try:
                     future_to_file = {tpe.submit(self.session.core_files_get_files, **file.meta_data_params): file for file in files}
@@ -94,9 +95,6 @@ class MoodleFrontend:
                     print('stopping…')
                     tpe.shutdown()
                     raise
-
-
-
 
         # for file in files:
         #     wrapped = models.FileMetaDataResponse(self.session.core_files_get_files(**file.meta_data_params))
@@ -111,8 +109,8 @@ class MoodleFrontend:
             # print('finished. ' + ' '.join(output))
 
     def download_files(self, assignment_ids=None):
-        courses = self.worktree.data
-        assignments = []
+        courses = self.wt.data
+        assignments: List[Assignment] = []
         if assignment_ids is None or 0 == len(assignment_ids):
             for c in courses:
                 assignments += c.assignments.values()
@@ -120,7 +118,7 @@ class MoodleFrontend:
             for c in courses:
                 assignments += c.get_assignments(assignment_ids)
 
-        files = self.worktree.prepare_download(assignments)
+        files = self.wt.prepare_download(assignments)
 
         file_count = len(files)
         counter = 0
@@ -135,14 +133,14 @@ class MoodleFrontend:
                         response = future.result()
                         counter += 1
                         interaction.print_progress(counter, file_count, suffix=file.path)
-                        self.worktree.write_submission_file(file, response.content)
+                        self.wt._write_submission_file(file, response.content)
                 except KeyboardInterrupt:
                     print('stopping…')
                     tpe.shutdown()
                     raise
 
         for a in assignments:
-            self.worktree.write_grading_and_html_file(a)
+            self.wt.write_grading_and_html_file(a)
 
     def upload_grades(self, upload_data):
         def argument_list(upload_data):
@@ -214,10 +212,10 @@ class MoodleFrontend:
 
         return token
 
-    def get_user_id(self):
+    def get_user_id(self, session):
         # TODO: wrap and return to wstools.auth
         from moodle.fieldnames import JsonFieldNames as Jn
-        data = self.session.core_webservice_get_site_info()
+        data = session.core_webservice_get_site_info()
         return data[Jn.user_id]
 
     def parse_grade_files(self, fd_list):
@@ -243,11 +241,11 @@ class MoodleFrontend:
             # cls needs to be set, for the strict flag to be registered.
             wrapped = GradingFile(json.load(file, cls=json.JSONDecoder, strict=False))
 
-            assignment = Assignment(self.worktree.assignments[wrapped.assignment_id])
-            assignment.course = Course(self.worktree.courses[assignment.course_id])
+            assignment = Assignment(self.wt.meta.assignments[wrapped.assignment_id])
+            assignment.course = Course(self.wt.meta.courses[assignment.courseid])
 
-            assignment.course.users = self.worktree.users[str(assignment.course_id)]
-            assignment.submissions = self.worktree.submissions[assignment.id]
+            assignment.course.parse_users(self.worktree.users[str(assignment.course_id)])
+            assignment.parse_submissions(self.worktree.submissions[assignment.id])
 
             wrapped.team_submission = assignment.is_team_submission
 
