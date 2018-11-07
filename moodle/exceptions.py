@@ -43,6 +43,13 @@ class MoodleException(Exception, metaclass=_ExceptionRegistry):
         except KeyError:
             return cls(exception, errorcode, message, debuginfo)
 
+    @classmethod
+    def generate_error(cls, error, errorcode, stacktrace='', debuginfo = '', reproductionlink=''):
+        try:
+            return cls.plugins[errorcode](error, errorcode, stacktrace, debuginfo)
+        except KeyError:
+            return cls(error, errorcode, stacktrace, debuginfo)
+
 
 class InvalidToken(MoodleException):
     code = 'invalidtoken'
@@ -78,6 +85,12 @@ class InvalidRecord(MoodleException):
     def __str__(self):
         return self.message + self.debug_message
 
+class InvalidLogin(MoodleException):
+    code = 'invalidlogin'
+
+    def __str__(self):
+        return f'{self.error_code}: {self.exception_name}'
+
 # webservice_access_exception accessexception Access Control Exception Invalid token - token expired - check validuntil time for the token
 
 # when asking for a unknown module ID, translates to nothing found, I guess.
@@ -87,3 +100,6 @@ class InvalidRecord(MoodleException):
 #   "errorcode": "invalidrecordunknown"
 #   "debuginfo": "SELECT md.name\n                                                 FROM {modules} md\n                                                 JOIN {course_modules} cm ON cm.module = md.id\n                                                WHERE cm.id = :cmid\n[array (\n  'cmid' => 117242,\n)]",
 # }
+
+generate_exception = MoodleException.generate_exception
+generate_error = MoodleException.generate_error
