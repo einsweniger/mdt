@@ -4,11 +4,13 @@ import json
 
 import requests
 
-from moodle.exceptions import MoodleException
+from moodle.exceptions import generate_exception, generate_error
 
 from moodle.fieldnames import text_format as moodle_text_format
 from moodle.fieldnames import JsonFieldNames as Jn
 from moodle.parsers import strip_mlang
+
+from mdt import Context
 
 import logging
 
@@ -36,6 +38,8 @@ class MoodleSessionCore(requests.Session):
         self.url = moodle_url
 
     def post_web_service(self, ws_function, args=None):
+        if self.token is None:
+            self.token = Context.get_config().config.token
         needed_args = {
             Jn.moodle_ws_rest_format: 'json',
             Jn.ws_token: self.token,
@@ -49,8 +53,12 @@ class MoodleSessionCore(requests.Session):
         response = self.post(self.url + self.ws_path, args)
         try:
             payload = json.loads(strip_mlang(response.text))
-            if isinstance(payload, dict) and 'exception' in payload:
-                raise MoodleException.generate_exception(**payload)
+            if isinstance(payload, dict):
+                if 'exception' in payload:
+                    raise generate_exception(**payload)
+                if 'error' in payload:
+                    raise generate_error(**payload)
+
             return payload
         except json.JSONDecodeError:
             log.error(f'moodle sent an unexpected response:\n {response.text}')
@@ -81,10 +89,14 @@ class MoodleSessionCore(requests.Session):
 
         try:
             payload = response.json()
-            print(payload)
+            if isinstance(payload, dict):
+                if 'exception' in payload:
+                    raise generate_exception(**payload)
+                if 'error' in payload:
+                    raise generate_error(**payload)
         except json.JSONDecodeError as e:
-            log.error(f'Moodle returned unexpected values, expected valid json:\n {e.__dict__}')
-            payload = {}
+            message = f'Moodle returned unexpected values, expected valid json:\n {e.__dict__}'
+            raise generate_error(message,'moodleproblem')
         try:
             return TokenResponse(**payload)
         except TypeError as e:
@@ -118,14 +130,16 @@ class MoodleSessionCore(requests.Session):
         try:
             payload = response.json()
             if isinstance(payload, dict) and 'exception' in payload:
-                raise MoodleException.generate_exception(**payload)
+                raise generate_exception(**payload)
             return payload
         except json.JSONDecodeError:
             log.error(f'moodle sent an unexpected response, expected valid json:\n {response.text}')
             raise SystemExit(1)
 
     def download_file(self, file_url):
-        args = {Jn.token: self.token}
+        if self.token is None:
+            self.token = Context.get_config().config.token
+        args = {'token': self.token}
         return self.post(file_url, args)
 
 
@@ -432,3 +446,5 @@ class MoodleSession(MoodleSessionCore):
                 })
 
         return self.post_web_service('core_course_get_contents', args=data)
+
+
