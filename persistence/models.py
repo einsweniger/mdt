@@ -2,11 +2,13 @@ import json
 import os
 
 from pathlib import Path
-from collections import Mapping
+from collections import Mapping, MutableMapping
 from abc import abstractmethod
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
+from typing import Iterator
+from datetime import datetime
 
-import moodle.responses as models
+from moodle import responses
 # TODO, mebbe add locks for async usage.
 
 
@@ -25,7 +27,7 @@ class CachedMapping(Mapping):
     def __init__(self):
         self._cache = {}
 
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> dict:
         # return value if in cache
         try:
             return self._cache[key]
@@ -36,8 +38,6 @@ class CachedMapping(Mapping):
     @abstractmethod
     def _read_data(self, key):
         pass
-
-
 class CachedFileMapping(Mapping):  # TODO: WIP
     def __init__(self, file_path):
         self._cache = None
@@ -137,18 +137,62 @@ class JsonMetaDataFolder(JsonDataFolder):
         return 'folder_name'
 
 
+class MappedFolder(MutableMapping):
+    def __init__(self, folder: Path):
+        self.folder = folder
+        if not self.folder.is_dir():
+            self.folder.mkdir()
+
+    def __setitem__(self, k: int, v: str) -> None:
+        file = self.folder/ str(k)
+        file.write_text(v)
+
+    def __delitem__(self, v) -> None:
+        pass # unimplemented
+
+    def __getitem__(self, k: int) -> str:
+        file = self.folder / str(k)
+        return file.read_text()
+
+    def __len__(self) -> int:
+        return len(list(self.__iter__()))
+
+    def __iter__(self) -> Iterator[int]:
+        for file in self.folder.iterdir():
+            yield int(file.name)
+
+
+class MappedDataclassFolder(MappedFolder):
+    def __init__(self, folder: Path, dataclass):
+        super().__init__(folder)
+        self.cls = dataclass
+
+    def __setitem__(self, k, v) -> None:
+        if not is_dataclass(v):
+            raise ValueError(f'{v} is not a dataclass')
+        v = json.dumps(asdict(v), ensure_ascii=False, indent=2)
+        super().__setitem__(k, v)
+
+    def __getitem__(self, k):
+        v = super().__getitem__(k)
+        v = json.loads(v, encoding='utf-8')
+        if type(v) is list:
+            return self.cls(v)
+        return self.cls(**v)
+
+
 class AssignmentFolder(JsonDataFolder):
     @property
     def folder_name(self):
         return 'assignments'
 
-    def update(self, response: models.mod_assign_get_assignments):
+    def update(self, response: responses.mod_assign_get_assignments):
         #response = models.mod_assign_get_assignments(**json_data)
         result = dict.fromkeys(['new', 'updated', 'unchanged'], 0)
         for course in response.courses:
             for assignment in course.assignments:
                 try:
-                    local_data = models.MoodleAssignment(**self[assignment.id])
+                    local_data = responses.mod_assign_get_assignments.course.assignment(**self[assignment.id])
                     if local_data.timemodified < assignment.timemodified:
                         self._setitem(assignment.id, asdict(assignment))
                         result['updated'] += 1
@@ -172,7 +216,7 @@ class SubmissionFolder(JsonMetaDataFolder):
     last_sync = 0
 
     def _update_submissions(self, assignment_id, submissions):
-        local_list = models.MoodleSubmissionList(self[assignment_id])
+        local_list = responses.MoodleSubmissionList(self[assignment_id])
         local_submissions = {sub.id: sub for sub in local_list}
         for submission in submissions:
             local_submissions[submission.id] = submission
@@ -180,15 +224,17 @@ class SubmissionFolder(JsonMetaDataFolder):
         self._setitem(assignment_id, raw)
 
     def update(self, json_data, time_of_sync):
+        print(json_data)
         result = dict.fromkeys(['new', 'updated', 'unchanged'], 0)
-        response = models.mod_assign_get_submissions(**json_data)
+        response = responses.mod_assign_get_submissions(**json_data)
         for assignment in response.assignments:
             if assignment.assignmentid in self and len(assignment.submissions) > 0:
                 self._update_submissions(assignment.assignmentid, assignment.submissions)
                 result['updated'] += 1
             elif len(assignment.submissions) > 0:
                 result['new'] += 1
-                self._setitem(assignment.assignmentid, asdict(assignment.submissions))
+                print(json_data)
+                self._setitem(assignment.assignmentid, json_data)
             else:
                 result['unchanged'] += 1
         self.last_sync = time_of_sync
@@ -204,25 +250,26 @@ class GradeFolder(JsonMetaDataFolder):
     last_sync = 0
 
     def _update_grades(self, assignment_id, grades):
-        local_list = models.MoodleGradeList(self[assignment_id])
+        local_list = responses.MoodleGradeList(self[assignment_id])
         local_grades = {grd.id: grd for grd in local_list}
         # local_grades = {grade[Jn.id]: grade for grade in self[assignment_id]}
         for grade in grades:
             local_grades[grade.id] = grade
-        raw = [grd.raw for grd in local_grades.values()]
+        raw = [asdict(grd) for grd in local_grades.values()]
         self._setitem(assignment_id, raw)
 
     def update(self, json_data, time_of_sync):
         # g_config_file = self.grade_meta + str(assignment[Jn.assignment_id])
         # self._write_meta(g_config_file, assignment)
-        response = models.AssignmentGradeResponse(json_data)
+        response = responses.mod_assign_get_grades(**json_data)
         result = dict.fromkeys(['new', 'updated', 'unchanged'], 0)
         for assignment in response.assignments:
-            if assignment.id in self and len(assignment.grades) > 0:
-                self._update_grades(assignment.id, assignment.grades)
+            if assignment.assignmentid in self and len(assignment.grades) > 0:
+                self._update_grades(assignment.assignmentid, assignment.grades)
                 result['updated'] += 1
             elif len(assignment.grades) > 0:
-                self._setitem(assignment.id, assignment.grades.raw)
+                raw = [asdict(grd) for grd in assignment.grades]
+                self._setitem(assignment.assignmentid, raw)
                 result['new'] += 1
             else:
                 result['unchanged'] += 1
@@ -231,7 +278,7 @@ class GradeFolder(JsonMetaDataFolder):
         return result
 
 
-class Config(models.JsonDictWrapper):
+class Config(responses.JsonDictWrapper):
     error_msg = """
     '{}' couldn't be found in your config file.
     Maybe it's corrupted.
