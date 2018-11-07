@@ -11,15 +11,15 @@ log = logging.getLogger('wstools')
 pm = ParserManager('wstools', 'internal sub command help')
 
 from .auth import auth
-from .config import config
+# from .config import config
 from .dump import dump
 from .enrol import enrol
 from .fetch import fetch
-# from .grade import grade
+from .grade import grade
 from .init import init
-# from .pull import pull
-# from .status import status
-# from .submit import submit
+from .pull import pull
+from .status import status
+from .submit import submit
 # from .upload import upload
 from .clone import clone
 

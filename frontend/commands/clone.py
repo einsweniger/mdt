@@ -37,4 +37,3 @@ def parse_or_throw(url) -> Tuple[str, str, int]:
 def clone(url, folder=None):
     scheme, host, course = parse_or_throw(url)
     base_url = f'{scheme}://{host}'
-

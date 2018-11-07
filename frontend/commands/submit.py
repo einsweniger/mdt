@@ -1,4 +1,17 @@
+from util import interaction
 from . import pm, Argument, ArgumentGroup
+import argparse
+from enum import IntEnum
+from pathlib import Path
+from mdt import Context
+from moodle.responses import FileUploadResponse, MoodleAssignment
+
+
+class text_format(IntEnum):
+    moodle = 0
+    html = 1
+    plain = 2
+    markdown = 4
 
 @pm.command(
     'submit text or files to assignment for grading',
@@ -23,20 +36,9 @@ def submit(text=None, textfiles=None, files=None, assignment_id=None):
     }
     ]"""
 
-    def determine_text_format_id(file_name):
-        ending = file_name.split('.')[-1]
-        if 'md' == ending:
-            return text_format['markdown']
-        if 'html' == ending:
-            return text_format['html']
-        if 'txt' == ending:
-            return text_format['plain']
-        return 0
-
-    frontend = MoodleFrontend()
     file_item_id = 0
     if files is not None:
-        file_response = frontend.upload_files(files)
+        file_response = upload_files(files)
         if file_response.has_errors:
             for error in file_response.errors:
                 print(error)
@@ -52,7 +54,7 @@ def submit(text=None, textfiles=None, files=None, assignment_id=None):
 
     text_file_item_id = 0
     if textfiles is not None:
-        text_file_response = frontend.upload_files(textfiles)
+        text_file_response = upload_files(textfiles)
         text_file_item_id = text_file_response[0]['itemid']
 
     submission_text = ''
@@ -63,14 +65,36 @@ def submit(text=None, textfiles=None, files=None, assignment_id=None):
 
     assignments = []
     if assignment_id is None:
-        wt = WorkTree()
-        for data in wt.assignments.values():
-            assignments.append(Assignment(data))
+        wt = Context.get_work_tree()
+        for data in wt.meta.assignments.values():
+            assignments.append(MoodleAssignment(**data))
         choice = interaction.input_choices_from_list(assignments, 'which assignment? ')
         assignment_id = assignments[choice[0]].id
 
     # print('{:s} {:d} {:d} {:d}'.format(text, submission_text_format, text_file_item_id, file_item_id))
-    data = frontend.save_submission(assignment_id, submission_text, submission_text_format, text_file_item_id,
+    data = save_submission(assignment_id, submission_text, submission_text_format, text_file_item_id,
                                     file_item_id)
     print(data)
 
+
+def determine_text_format_id(file_name: Path) -> IntEnum:
+    ending = file_name.suffix
+    if 'md' == ending:
+        return text_format.markdown
+    if 'html' == ending:
+        return text_format.html
+    if 'txt' == ending:
+        return text_format.plain
+    return text_format.moodle
+
+
+def upload_files(files):
+    # TODO, Wrap and return it, don't print. do print in wstools.upload. also modify submit
+    response = Context.get_session().upload_files(files)
+    return FileUploadResponse(**response)
+
+
+def save_submission(assignment_id, text='', text_format=0, text_file_id=0, files_id=0):
+    # TODO: wrap and return to wstools.submit
+    response = Context.get_session().mod_assign_save_submission(assignment_id, text, int(text_format), text_file_id, files_id)
+    return response

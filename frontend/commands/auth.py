@@ -1,4 +1,5 @@
 from moodle.communication import MoodleSession
+from moodle.exceptions import InvalidLogin
 from persistence.config import GlobalConfig, get_global_config
 from util import interaction
 from . import pm, Argument
@@ -22,7 +23,6 @@ def auth(url=None, ask=False, user_name=None, service='moodle_mobile_app', cfg: 
     :param service: the configured Web Service, you'd like the token for.
     :return: nothing.
     """
-
     if cfg is None:
         cfg = get_global_config()
     url = url or cfg.config.url
@@ -38,18 +38,22 @@ def auth(url=None, ask=False, user_name=None, service='moodle_mobile_app', cfg: 
         if user_name is None or user_name.strip() == '':
             user_name = interaction.input_user_name()
 
-    password = interaction.input_password()
-
     session = MoodleSession(moodle_url=url)
 
-    response = session.get_token(user_name, password, service)
-    print(response)
-    session.token = cfg.config.token = response.token
-    del password
+    while True:
+        try:
+            password = interaction.input_password()
 
-    # Writing values here once, to allow MoodleFrontend to read from it.
-    data = session.core_webservice_get_site_info()
+            response = session.get_token(user_name, password, service)
+            session.token = cfg.config.token = response.token
+            del password
+        except InvalidLogin as e:
+            print(e)
 
-    cfg.config.user_id = data['userid']
-    cfg.write()
-    return cfg
+        print(f'got token, requesting user info')
+        # Writing values here once, to allow MoodleFrontend to read from it.
+        data = session.core_webservice_get_site_info()
+
+        cfg.config.user_id = data['userid']
+        cfg.write()
+        return cfg
