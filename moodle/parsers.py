@@ -32,15 +32,3 @@ def strip_mlang(string, preferred_lang='en'):
     return strip_mlang_tag.sub('', string)
 
 
-parse_args_from_url = re.compile(r'.*pluginfile.php'
-                                 r'/(?P<context_id>[0-9]*)'
-                                 r'/(?P<component>\w+)'
-                                 r'/(?P<file_area>\w+)'
-                                 r'/(?P<item_id>[0-9]*).*')
-
-
-def file_meta_dict_from_url(url):
-    match = parse_args_from_url.match(url)
-    return match.groupdict()
-
-
