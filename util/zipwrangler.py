@@ -6,7 +6,8 @@ import shutil
 ignore = ['__MACOSX', '.DS_Store']
 
 
-def get_cleaned_contents(zipfile, ignore_list=ignore, verbose=False):
+def get_cleaned_contents(zipfile, ignore_list=None, verbose=False):
+    ignore_list = ignore_list or ignore
     contents = []
     for info in zipfile.infolist():
         if not any(ignored in info.filename for ignored in ignore_list):
@@ -16,7 +17,8 @@ def get_cleaned_contents(zipfile, ignore_list=ignore, verbose=False):
     return contents
 
 
-def clean_unzip_with_temp_dir(zipfilename: Path, target=None, ignore_list=ignore, overwrite=False, remove_zip=False):
+def clean_unzip_with_temp_dir(zipfilename: Path, target=None, ignore_list=None, overwrite=False, remove_zip=False):
+    ignore_list = ignore_list or ignore
     zipfile = ZipFile(str(zipfilename))
     if target is None:
         target = Path.cwd() / zipfilename.stem
@@ -26,6 +28,8 @@ def clean_unzip_with_temp_dir(zipfilename: Path, target=None, ignore_list=ignore
         target.mkdir(exist_ok=overwrite)
     except FileExistsError:
         print(f'file exists, not extracting {zipfilename.name} to {target}')
+        if remove_zip:
+            zipfilename.unlink()
         return
 
     contents = get_cleaned_contents(zipfile, ignore_list)
