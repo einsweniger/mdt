@@ -1,12 +1,48 @@
 #!/usr/bin/env python3
 
 import sys
-
+import asyncio
 from frontend import commands
+from moodle.exceptions import MoodleException
+
 from persistence.worktree import NotInWorkTree
 
-from persistence.config import get_global_config
 from util import interaction
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from persistence.worktree import WorkTree
+    from moodle.communication import MoodleSession
+    from persistence.config import get_global_config, GlobalConfig
+
+
+class Context:
+    WT: 'WorkTree' = None
+    MS: 'MoodleSession' = None
+    CFG: 'GlobalConfig' = None
+    MAX_WORKERS: int = 10
+
+    @classmethod
+    def get_work_tree(cls) -> 'WorkTree':
+        if cls.WT is None:
+            from persistence.worktree import WorkTree
+            cls.WT = WorkTree()
+        return cls.WT
+
+    @classmethod
+    def get_config(cls) -> 'GlobalConfig':
+        if cls.CFG is None:
+            from persistence.config import get_global_config
+            cls.CFG = get_global_config()
+        return cls.CFG
+
+    @classmethod
+    def get_session(cls) -> 'MoodleSession':
+        if cls.MS is None:
+            from moodle.communication import MoodleSession
+            cls.MS = MoodleSession(cls.get_config().config.url)
+        return cls.MS
 
 
 def check_for_sub_command():
@@ -17,7 +53,7 @@ def check_for_sub_command():
 
 
 def check_config():
-    cfg = get_global_config()
+    cfg = Context.get_config()
     missing = list(cfg.missing_values())
     while 0 != len(missing):
         if 'user_name' in missing:
@@ -28,7 +64,7 @@ def check_config():
     return cfg
 
 
-def main():
+async def main():
     check_config()
     sub_command = check_for_sub_command()
 
@@ -52,7 +88,7 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        asyncio.run(main())
         print('exiting…')
     except KeyboardInterrupt:
         print('exiting…')
@@ -62,6 +98,8 @@ if __name__ == '__main__':
     except NotInWorkTree as e:
         print(e)
         raise SystemExit(1)
+    except MoodleException as e:
+        print(f'error: moodle had a problem:\n {e}')
     except Exception as e:
         print('onoz…')
         print(e)
