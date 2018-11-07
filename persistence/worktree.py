@@ -5,9 +5,10 @@ import re
 
 from pathlib import Path
 
-from frontend.models import Course, GlobalConfig, Assignment
+from moodle import responses
 from moodle.fieldnames import JsonFieldNames as Jn
-from persistence.models import AssignmentFolder, SubmissionFolder, GradeFolder
+from moodle.responses import MoodleAssignment
+from persistence.models import AssignmentFolder, SubmissionFolder, GradeFolder, MappedDataclassFolder
 from util import zipwrangler
 from typing import List, Iterable
 from enum import Enum
@@ -92,7 +93,7 @@ class MetaDataStorage:
         self.moodle_data = self.data_root / FolderNames.MOODLE.value
         self.course_data = self.data_root / FolderNames.COURSES.value
         self._course_data = _load_json_file(self.course_data)
-        self._user_data = _load_json_file(self.user_data)
+        self._user_data = MappedDataclassFolder(self.data_root/'users', responses.MoodleUser)
         self._assignment_data = AssignmentFolder(self.data_root, init)
         self._submission_data = SubmissionFolder(self.data_root, init)
         self._grade_data = GradeFolder(self.data_root, init)
@@ -139,6 +140,9 @@ class MetaDataStorage:
         self._user_data = value
 
 
+def safe_file_name(name):
+    return re.sub(r'\W', '_', name)
+
 
 class WorkTree:
     def __init__(self, init=False, skip_init=False):
@@ -146,13 +150,25 @@ class WorkTree:
             return
 
         self.root = self.find_work_tree_root()
-        if self.root is None and not init:
-            raise NotInWorkTree()
-
-        self.meta = MetaDataStorage(self.root, init)
+        if self.root is None:
+            if not init:
+                raise NotInWorkTree()
 
         if init:
             self.root = self._initialize()
+
+        self.meta = MetaDataStorage(self.root, init)
+
+
+    def get_folder_for_assignment(self, assignment_id) -> Path:
+        assignment = MoodleAssignment(**self.meta.assignments[assignment_id])
+        prefix = safe_file_name(assignment.name)
+        folder_name = f'{prefix}--{assignment_id:d}'
+        path = self.root / folder_name
+        if not path.is_dir():
+            path.mkdir()
+        return path
+
 
     @classmethod
     def _initialize(cls):
@@ -160,8 +176,6 @@ class WorkTree:
         root.mkdir(exist_ok=True)
         users = root / FolderNames.USERS.value
         courses = root / FolderNames.COURSES.value
-        if not users.is_file():
-            users.write_text('[]')
         if not courses.is_file():
             courses.write_text('[]')
         return Path.cwd()
@@ -191,50 +205,42 @@ class WorkTree:
     def in_tree(self):
         return self.find_work_tree_root() is not None
 
-    @property
-    def data(self):
-        cs = []
-
-        for course_data in self.meta.courses.values():
-            course = Course(course_data)
-            users = self.meta.users
-            if users is None or len(users) == 0:
-                no_users_msg = """
-                No users in courses found.
-                If you did not sync already, metadata is probably missing.
-                Use subcommand sync to retrieve metadata from selected moodle
-                courses.
-                """
-                raise SystemExit(no_users_msg)
-            else:
-                    course.parse_users(users[str(course.id)])
-
-            assignment_list = []
-            for assignment_data in self.meta.assignments.values():
-                if assignment_data[Jn.course] == course.id:
-                    assignment_list.append(assignment_data)
-            # course.assignments = [a for a in self.assignments.values() if a[Jn.course] == course.id]
-            course.parse_assignments(assignment_list)
-
-            for assignment in course.assignments.values():
-                assignment.parse_submissions(self.meta.submissions.get(assignment.id, None))
-                assignment.parse_grades(self.meta.grades.get(assignment.id, None))
-
-            cs.append(course)
-        return cs
+    # @property
+    # def data(self):
+    #     cs = []
+    #
+    #     for course_data in self.meta.courses.values():
+    #         course = Course(course_data)
+    #         users = self.meta.users
+    #         if users is None or len(users) == 0:
+    #             no_users_msg = """
+    #             No users in courses found.
+    #             If you did not sync already, metadata is probably missing.
+    #             Use subcommand fetch to retrieve metadata from selected moodle
+    #             courses.
+    #             """
+    #             raise SystemExit(no_users_msg)
+    #         else:
+    #             course.parse_users(users[str(course.id)])
+    #
+    #         assignment_list = []
+    #         for assignment_data in self.meta.assignments.values():
+    #             if assignment_data[Jn.course] == course.id:
+    #                 assignment_list.append(assignment_data)
+    #         # course.assignments = [a for a in self.assignments.values() if a[Jn.course] == course.id]
+    #         course.parse_assignments(assignment_list)
+    #
+    #         for assignment in course.assignments.values():
+    #             assignment.parse_submissions(self.meta.submissions.get(assignment.id, None))
+    #             assignment.parse_grades(self.meta.grades.get(assignment.id, None))
+    #
+    #         cs.append(course)
+    #     return cs
 
     def _merge_json_data_in_folder(self, path):
         files = glob.glob(path + '*')
         data_list = [_load_json_file(file) for file in files]
         return data_list
-
-    @staticmethod
-    def safe_file_name(name):
-        return re.sub(r'\W', '_', name)
-
-    @staticmethod
-    def formatted_assignment_folder(assignment):
-        return Path(WorkTree.safe_file_name(f'{assignment.name}--{assignment.id:d}'))
 
     def write_grading_and_html_file(self, assignment):
         # TODO: check if submission was after deadline and write to grading file
@@ -255,40 +261,6 @@ class WorkTree:
         if html_content is not None:
             html_file = a_folder / '00_merged_submissions.html'
             html_file.write_text(html_content)
-
-    @staticmethod
-    def _create_folders(files):
-        folders = set([f.path.parent for f in files])
-        for folder in folders:
-            folder.mkdir(exist_ok=True, parents=True)
-
-    @staticmethod
-    def _write_submission_file(file, content):
-        with open(file.path, 'wb') as fd:
-            fd.write(content)
-        if file.path.suffix == '.zip':
-            zipwrangler.clean_unzip_with_temp_dir(file.path, target=file.path.parent, remove_zip=True)
-
-    def prepare_download(self, assignments: List[Assignment]):
-        files = []
-        for a in assignments:
-            for s in a.submissions.values():
-                a_folder = self.root / self.formatted_assignment_folder(a)
-                s_files = list(s.files)
-                if len(s_files) > 1:
-                    s_folder = a_folder / self.safe_file_name(s.prefix)
-                    for file in s_files:
-                        file.path = s_folder / file.path[1:] / file.name
-                        files.append(file)
-                elif len(s_files) == 1:
-                    file = s_files[0]
-                    path = self.safe_file_name(s.prefix) + '--'
-                    path += file.path[1:].replace('/', '_')
-                    file.path = a_folder / file.name
-                    files.append(file)
-        self._create_folders(files)
-        return files
-
 
 class NotInWorkTree(Exception):
     def __init__(self):
