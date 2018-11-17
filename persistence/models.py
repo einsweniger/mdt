@@ -224,7 +224,6 @@ class SubmissionFolder(JsonMetaDataFolder):
         self._setitem(assignment_id, raw)
 
     def update(self, json_data, time_of_sync):
-        print(json_data)
         result = dict.fromkeys(['new', 'updated', 'unchanged'], 0)
         response = responses.mod_assign_get_submissions(**json_data)
         for assignment in response.assignments:
@@ -233,8 +232,8 @@ class SubmissionFolder(JsonMetaDataFolder):
                 result['updated'] += 1
             elif len(assignment.submissions) > 0:
                 result['new'] += 1
-                print(json_data)
-                self._setitem(assignment.assignmentid, json_data)
+                raw = [asdict(sub) for sub in assignment.submissions]
+                self._setitem(assignment.assignmentid, raw)
             else:
                 result['unchanged'] += 1
         self.last_sync = time_of_sync
