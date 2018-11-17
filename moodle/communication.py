@@ -107,6 +107,8 @@ class MoodleSessionCore(requests.Session):
             raise
 
     def upload_files(self, fd_list, file_path='/', file_area='draft', item_id=0):
+        if self.token is None:
+            self.token = Context.get_config().config.token
         endpoint = '/webservice/upload.php'
         mimetypes.init()
 
