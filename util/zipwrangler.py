@@ -27,7 +27,7 @@ def clean_unzip_with_temp_dir(zipfilename: Path, target=None, ignore_list=None, 
     try:
         target.mkdir(exist_ok=overwrite)
     except FileExistsError:
-        print(f'file exists, not extracting {zipfilename.name} to {target}')
+        # print(f'file exists, not extracting {zipfilename.name} to {target}')
         if remove_zip:
             zipfilename.unlink()
         return
