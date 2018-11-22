@@ -74,7 +74,6 @@ def pull(assignment_ids=None, all=False):
 
         filecontent = f'{{"assignment": {aid:d}, "team":{assignment.teamsubmission}, "grades": [\n'
         filecontent += ',\n'.join(sorted(grade_file_content)) + '\n]}'
-        print(filecontent)
         counter = 0
         grade_file_path = assignment_folder / f'grades_{counter:02d}.json'
         while grade_file_path.is_file():
@@ -121,36 +120,36 @@ def download_files(outpath2url):
             raise
 
 
-def grading_file_content(a: MoodleAssignment):
-    # TODO, instead of writing the submission.id, write the user.id instead.
-    # TODO, add team_submission to the file, saves work when uploading grades.
-    head = '{{"assignment_id": {:d}, "grades": [\n'
-    end = '\n]}'
-    line_format = '{{"name": "{}", "id": {:d}, "grade": {:3.1f}, "feedback":"" }}'
-    content = []
-
-    if a.teamsubmission:
-        for s_id, s in a.submissions.items():
-            if s.groupid not in self.course.groups:
-                # FIXME: invalid grouping
-                continue
-            group = self.course.groups[s.groupid]
-            grade = 0.0
-            if s.grade is not None:
-                grade = s.grade.value or 0.0
-
-            line = f'{{"name": "{group.name}", "id": {s.id}, "grade": {grade:3.1f}, "feedback":"" }}'
-            content.append(line)
-    else:
-        for s_id, s in self.submissions.items():
-            user = self.course.users[s.userid]
-            grade = 0.0
-            if s.grade is not None:
-                grade = s.grade.value or 0.0
-            print(f'{user.name}')
-            print(f'{s.id}')
-            print(f'{grade}')
-            line = f'{{"name": "{user.name}", "id": {s.id}, "grade": {grade:3.1f}, "feedback":"" }}'
-            content.append(line)
-
-    return head.format(self.id) + ',\n'.join(sorted(content)) + end
+# def grading_file_content(a: MoodleAssignment):
+#     # TODO, instead of writing the submission.id, write the user.id instead.
+#     # TODO, add team_submission to the file, saves work when uploading grades.
+#     head = '{{"assignment_id": {:d}, "grades": [\n'
+#     end = '\n]}'
+#     line_format = '{{"name": "{}", "id": {:d}, "grade": {:3.1f}, "feedback":"" }}'
+#     content = []
+#
+#     if a.teamsubmission:
+#         for s_id, s in a.submissions.items():
+#             if s.groupid not in self.course.groups:
+#                 # FIXME: invalid grouping
+#                 continue
+#             group = self.course.groups[s.groupid]
+#             grade = 0.0
+#             if s.grade is not None:
+#                 grade = s.grade.value or 0.0
+#
+#             line = f'{{"name": "{group.name}", "id": {s.id}, "grade": {grade:3.1f}, "feedback":"" }}'
+#             content.append(line)
+#     else:
+#         for s_id, s in self.submissions.items():
+#             user = self.course.users[s.userid]
+#             grade = 0.0
+#             if s.grade is not None:
+#                 grade = s.grade.value or 0.0
+#             print(f'{user.name}')
+#             print(f'{s.id}')
+#             print(f'{grade}')
+#             line = f'{{"name": "{user.name}", "id": {s.id}, "grade": {grade:3.1f}, "feedback":"" }}'
+#             content.append(line)
+#
+#     return head.format(self.id) + ',\n'.join(sorted(content)) + end
